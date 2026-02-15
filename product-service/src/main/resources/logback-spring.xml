@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+        JSON Structured Logging for Product Service
+        
+        This config outputs all logs as JSON to stdout, which is ideal for:
+        - Fluentd / Fluent Bit collection from container logs
+        - Azure Container Insights
+        - Application Insights log correlation
+        
+        Each log line includes:
+        - timestamp, level, logger, message
+        - trace_id, span_id (injected by OTEL Java Agent via MDC)
+        - service_name
+    -->
+
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Add OTEL trace context from MDC (injected by Java Agent) -->
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>span_id</includeMdcKeyName>
+            <includeMdcKeyName>trace_flags</includeMdcKeyName>
+
+            <!-- Add static fields -->
+            <customFields>{"service_name":"${OTEL_SERVICE_NAME:-product-service}"}</customFields>
+
+            <!-- ISO 8601 timestamp format -->
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
+            <timeZone>UTC</timeZone>
+        </encoder>
+    </appender>
+
+    <!-- Root logger — all logs go to JSON stdout -->
+    <root level="INFO">
+        <appender-ref ref="JSON_STDOUT" />
+    </root>
+
+    <!-- Application-specific logging -->
+    <logger name="com.demo.productservice" level="INFO" />
+
+    <!-- Suppress noisy framework logs -->
+    <logger name="org.hibernate.SQL" level="WARN" />
+    <logger name="org.springframework.web" level="WARN" />
+</configuration>

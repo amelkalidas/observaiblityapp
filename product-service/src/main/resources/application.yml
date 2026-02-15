@@ -1,0 +1,50 @@
+# Application Configuration
+server:
+  port: 8080
+
+spring:
+  application:
+    name: product-service
+
+  # H2 In-Memory Database
+  datasource:
+    url: jdbc:h2:mem:productdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+  # H2 Console (useful for local dev — disable in production)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Actuator — expose health and metrics endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  # Micrometer OTLP metrics export
+  otlp:
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
+        step: 15s
+        resource-attributes:
+          service.name: ${OTEL_SERVICE_NAME:product-service}
+
+# Logging — handled by logback-spring.xml for JSON output
+logging:
+  level:
+    root: INFO
+    com.demo.productservice: INFO

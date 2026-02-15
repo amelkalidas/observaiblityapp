@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: observability-demo
+  labels:
+    app: order-service
+    app.kubernetes.io/name: order-service
+    app.kubernetes.io/part-of: observability-demo
+spec:
+  type: ClusterIP
+  # Change to LoadBalancer if you want external access:
+  # type: LoadBalancer
+  selector:
+    app: order-service
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
