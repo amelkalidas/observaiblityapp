@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: observability-demo
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.96.0
+        args:
+          - "--config=/conf/otel-collector-config.yaml"
+        ports:
+        - containerPort: 4317  # OTLP gRPC
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318  # OTLP HTTP
+          name: otlp-http
+          protocol: TCP
+        - containerPort: 8888  # Prometheus metrics (collector's own metrics)
+          name: metrics
+          protocol: TCP
+        volumeMounts:
+        - name: otel-collector-config-vol
+          mountPath: /conf
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: otel-collector-config-vol
+        configMap:
+          name: otel-collector-config
+          items:
+          - key: otel-collector-config.yaml
+            path: otel-collector-config.yaml

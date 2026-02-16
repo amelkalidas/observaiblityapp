@@ -1,13 +1,3 @@
-# ============================================================
-# OTEL ConfigMap — 🔧 Admin/DevOps responsibility
-# ============================================================
-# This ConfigMap provides all OpenTelemetry environment variables
-# to both microservices. Developers write vendor-neutral code;
-# the Admin controls WHERE telemetry goes by changing these values.
-#
-# To switch backends (e.g. Jaeger → Application Insights → Tempo),
-# just update OTEL_EXPORTER_OTLP_ENDPOINT — zero code changes.
-# ============================================================
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -17,13 +7,11 @@ metadata:
     app.kubernetes.io/part-of: observability-demo
     app.kubernetes.io/component: configuration
 data:
-  # --- OTEL Collector endpoint (deployed as DaemonSet or Deployment) ---
-  # Change this to your OTEL Collector's ClusterIP service address
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability-demo.svc.cluster.local:4318"
+  # --- Direct export to Azure Application Insights ---
+  APPLICATIONINSIGHTS_CONNECTION_STRING: "InstrumentationKey=1f3a1dfd-cf0b-4111-92ed-b118098b25b9;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=5ff27e9e-11e1-4c74-9395-15ee64f5cffd"
 
-  # --- For Azure Application Insights direct export (alternative to Collector) ---
-  # Uncomment and set your connection string from Azure Portal:
-  # APPLICATIONINSIGHTS_CONNECTION_STRING: "InstrumentationKey=xxxxx;IngestionEndpoint=https://xxxxx"
+  # --- REMOVE or COMMENT OUT this line (no OTEL Collector deployed) ---
+  # OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability-demo.svc.cluster.local:4318"
 
   # --- Trace/Metric/Log exporters ---
   OTEL_TRACES_EXPORTER: "otlp"

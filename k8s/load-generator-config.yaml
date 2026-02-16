@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: load-generator-script
+  namespace: observability-demo
+data:
+  script.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+
+    export const options = {
+      vus: 5,           // 5 concurrent users
+      duration: '3m',   // Run for 3 minutes
+    };
+
+    export default function () {
+      // Products 1-5 (random choice)
+      const productId = Math.floor(Math.random() * 5) + 1;
+      const quantity = Math.floor(Math.random() * 3) + 1;
+      
+      const payload = JSON.stringify({
+        productId: productId,
+        quantity: quantity,
+      });
+
+      const params = {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      };
+
+      // POST /orders
+      const res = http.post('http://order-service:3000/orders', payload, params);
+      
+      check(res, {
+        'status is 201': (r) => r.status === 201,
+        'status is 409': (r) => r.status === 409, // Insufficient stock (expected)
+      });
+      
+      sleep(1);
+    }

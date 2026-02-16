@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: observability-demo
+  labels:
+    app: otel-collector
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+          grpc:
+            endpoint: 0.0.0.0:4317
+    
+    # Enable health check extension
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+    
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: 1024
+      
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+    
+    exporters:
+      azuremonitor:
+        connection_string: "InstrumentationKey=1f3a1dfd-cf0b-4111-92ed-b118098b25b9;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=5ff27e9e-11e1-4c74-9395-15ee64f5cffd"
+      
+      logging:
+        loglevel: info
+    
+    service:
+      # Enable the extension here
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [azuremonitor, logging]
+        
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [azuremonitor, logging]
+        
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [logging]
