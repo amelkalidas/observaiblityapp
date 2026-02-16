@@ -1,0 +1,15 @@
+# Create resource group (if not exists)
+az group create --name rg-observability-demo --location eastus
+
+# Create Application Insights
+az monitor app-insights component create \
+  --app observability-demo-appinsights \
+  --location eastus \
+  --resource-group rg-observability-demo \
+  --application-type web
+
+# Get connection string (save this!)
+az monitor app-insights component show \
+  --app observability-demo-appinsights \
+  --resource-group rg-observability-demo \
+  --query connectionString -o tsv
