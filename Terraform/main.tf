@@ -2,11 +2,11 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 3.116.0"
     }
     azuread = {
       source  = "hashicorp/azuread"
-      version = "~> 2.0"
+      version = "~> 2.47.0"
     }
   }
 }
@@ -19,14 +19,18 @@ provider "azurerm" {
 
 data "azurerm_client_config" "current" {}
 
+# ============================================================
 # 1. Resource Group
+# ============================================================
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
   tags     = var.tags
 }
 
+# ============================================================
 # 2. Log Analytics Workspace
+# ============================================================
 resource "azurerm_log_analytics_workspace" "law" {
   name                = var.log_analytics_name
   location            = azurerm_resource_group.rg.location
@@ -36,56 +40,16 @@ resource "azurerm_log_analytics_workspace" "law" {
   tags                = var.tags
 }
 
-# 3. Data Collection Endpoint (DCE) - Explicit
-resource "azurerm_monitor_data_collection_endpoint" "dce" {
-  name                          = "dce-aks-${var.location}"
-  resource_group_name           = azurerm_resource_group.rg.name
-  location                      = azurerm_resource_group.rg.location
-  kind                          = "Linux"
-  public_network_access_enabled = true # Replaces "network_access_type"
-  tags                          = var.tags
-}
-
-# 4. Data Collection Rule (DCR) - Explicit
-resource "azurerm_monitor_data_collection_rule" "dcr" {
-  name                        = "dcr-aks-container-insights"
-  resource_group_name         = azurerm_resource_group.rg.name
-  location                    = azurerm_resource_group.rg.location
-  data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.dce.id
-  tags                        = var.tags
-
-  destinations {
-    log_analytics {
-      workspace_resource_id = azurerm_log_analytics_workspace.law.id
-      name                  = "law-destination"
-    }
-  }
-
-  data_flow {
-    streams      = ["Microsoft-ContainerLogV2", "Microsoft-KubeEvents"]
-    destinations = ["law-destination"]
-    # COST SAVING: Drop any logs that are 'Debug' level
-    transform_kql = "source | where LogLevel != 'Debug'"
-  }
-
-  data_sources {
-    extension {
-      streams        = ["Microsoft-ContainerLogV2", "Microsoft-KubeEvents"]
-      extension_name = "ContainerInsights"
-      extension_json = jsonencode({
-        "dataCollectionSettings": {
-          "interval": "1m",
-          "namespaceFilteringMode": "Include",
-          # Example: Only collect logs from these namespaces
-          "namespaces": ["default", "kube-system", "production"] 
-        }
-      })
-      name = "ContainerInsightsExtension"
-    }
-  }
-}
-
-# 5. AKS Cluster
+# ============================================================
+# 3. AKS Cluster
+# ============================================================
+# Note: When oms_agent is enabled with msi_auth_for_monitoring_enabled = true,
+# AKS automatically creates:
+# - Data Collection Endpoint (DCE)
+# - Data Collection Rule (DCR) named "MSCI-<cluster-name>"
+# - DCR Association (links AKS to DCR)
+# This eliminates the need for manual DCR creation and avoids validation errors.
+# ============================================================
 resource "azurerm_kubernetes_cluster" "aks" {
   name                = var.cluster_name
   location            = azurerm_resource_group.rg.location
@@ -102,10 +66,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
     type = "SystemAssigned"
   }
 
-  # Enable Monitoring Addon with Managed Identity
+  # Enable Container Insights (Azure Monitor Agent)
+  # This automatically creates DCR with name: MSCI-<cluster-name>
   oms_agent {
     log_analytics_workspace_id      = azurerm_log_analytics_workspace.law.id
-    msi_auth_for_monitoring_enabled = true # REQUIRED for DCRs
+    msi_auth_for_monitoring_enabled = true
   }
 
   network_profile {
@@ -116,17 +81,9 @@ resource "azurerm_kubernetes_cluster" "aks" {
   tags = var.tags
 }
 
-# 6. Associate DCR to AKS (The Link)
-resource "azurerm_monitor_data_collection_rule_association" "dcra" {
-  name                    = "dcra-aks-link"
-  target_resource_id      = azurerm_kubernetes_cluster.aks.id
-  data_collection_rule_id = azurerm_monitor_data_collection_rule.dcr.id
-  description             = "Link AKS to DCR for Container Insights"
-}
-
-# --- Grafana Authentication Section ---
-
-# 7. Azure AD Application for Grafana
+# ============================================================
+# 4. Azure AD Application for Grafana
+# ============================================================
 data "azuread_client_config" "current" {}
 
 resource "azuread_application" "grafana_app" {
@@ -139,37 +96,75 @@ resource "azuread_service_principal" "grafana_sp" {
   owners    = [data.azuread_client_config.current.object_id]
 }
 
-resource "azuread_service_principal_password" "grafana_secret" {
-  service_principal_id = azuread_service_principal.grafana_sp.id
+# Use application_password (not service_principal_password) for Grafana client secret
+resource "azuread_application_password" "grafana_secret" {
+  application_id = azuread_application.grafana_app.id
+  display_name   = "Grafana Client Secret"
+  end_date       = "2027-02-21T00:00:00Z"
 }
 
-# 8. Role Assignment: Grant "Monitoring Reader" to Grafana SP on the Resource Group
-# This allows Grafana to query logs via "Resource-Context"
+# ============================================================
+# 5. Role Assignment: Grafana Service Principal → Monitoring Reader
+# ============================================================
+# This allows Grafana to query logs from Log Analytics Workspace
+# using "Resource-Context" authentication (scoped to this RG only)
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
   scope                = azurerm_resource_group.rg.id
   role_definition_name = "Monitoring Reader"
   principal_id         = azuread_service_principal.grafana_sp.object_id
 }
 
-# --- Outputs ---
+# ============================================================
+# Outputs
+# ============================================================
 
 output "grafana_tenant_id" {
-  value = data.azuread_client_config.current.tenant_id
-  description = "Grafana: Tenant ID"
+  value       = data.azuread_client_config.current.tenant_id
+  description = "Grafana: Tenant ID (use in Grafana Azure Monitor datasource)"
 }
 
 output "grafana_client_id" {
-  value = azuread_application.grafana_app.client_id
-  description = "Grafana: Client ID"
+  value       = azuread_application.grafana_app.client_id
+  description = "Grafana: Client ID / Application ID"
 }
 
 output "grafana_client_secret" {
-  value     = azuread_service_principal_password.grafana_secret.value
-  sensitive = true
-  description = "Grafana: Client Secret"
+  value       = azuread_application_password.grafana_secret.value
+  sensitive   = true
+  description = "Grafana: Client Secret (use 'terraform output -raw grafana_client_secret' to view)"
 }
 
 output "default_subscription_id" {
-  value = data.azurerm_client_config.current.subscription_id
-  description = "Grafana: Default Subscription ID"
+  value       = data.azurerm_client_config.current.subscription_id
+  description = "Grafana: Subscription ID"
+}
+
+output "aks_cluster_name" {
+  value       = azurerm_kubernetes_cluster.aks.name
+  description = "AKS Cluster Name"
+}
+
+output "resource_group_name" {
+  value       = azurerm_resource_group.rg.name
+  description = "Resource Group Name"
+}
+
+output "log_analytics_workspace_id" {
+  value       = azurerm_log_analytics_workspace.law.id
+  description = "Log Analytics Workspace Resource ID"
+}
+
+output "log_analytics_workspace_name" {
+  value       = azurerm_log_analytics_workspace.law.name
+  description = "Log Analytics Workspace Name"
+}
+
+output "auto_generated_dcr_name" {
+  value       = "MSCI-${azurerm_kubernetes_cluster.aks.name}"
+  description = "Auto-generated DCR name (check in Azure Portal → Monitor → Data Collection Rules)"
+}
+
+output "aks_system_assigned_identity" {
+  value       = azurerm_kubernetes_cluster.aks.identity[0].principal_id
+  description = "AKS Managed Identity Principal ID (used for DCR association)"
 }
