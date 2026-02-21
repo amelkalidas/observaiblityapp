@@ -35,7 +35,7 @@ terraform.rc
 
 # Lock files (optional - some teams commit this, some don't)
 # Uncomment if you want to ignore lock files:
-# .terraform.lock.hcl
+.terraform.lock.hcl
 
 # ===========================
 # Kubernetes Secrets
