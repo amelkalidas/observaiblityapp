@@ -2,7 +2,8 @@
 # Order Service Deployment — 🔧 Admin/DevOps responsibility
 # ============================================================
 # BRANCH: feature2_AMA
-# Uses Azure Monitor native instrumentation instead of OTEL Collector
+# Uses Azure Monitor Agent (AMA) for container logs only
+# No Application Insights - pure log-based observability
 # ============================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -31,8 +32,6 @@ spec:
     spec:
       containers:
         - name: order-service
-          # Replace with your ACR image path:
-          # image: <your-acr>.azurecr.io/order-service:ama-v1
           image: ameldocker98/order-service:v1
           imagePullPolicy: IfNotPresent
           ports:
@@ -43,14 +42,6 @@ spec:
           env:
             - name: PORT
               value: "3000"
-            # Azure Monitor Application Insights
-            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: app-insights-connection
-                  key: connection-string
-            - name: APPLICATIONINSIGHTS_ROLE_NAME
-              value: "order-service"
             # Service URLs
             - name: PRODUCT_SERVICE_URL
               value: "http://product-service.observability-demo.svc.cluster.local:8080"
