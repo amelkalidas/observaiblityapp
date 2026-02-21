@@ -1,6 +1,9 @@
 # ============================================================
 # Product Service Deployment — 🔧 Admin/DevOps responsibility
 # ============================================================
+# BRANCH: feature2_AMA
+# Uses Azure Monitor native instrumentation instead of OTEL Collector
+# ============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,7 +32,7 @@ spec:
       containers:
         - name: product-service
           # Replace with your ACR image path:
-          # image: <your-acr>.azurecr.io/product-service:1.0.0
+          # image: <your-acr>.azurecr.io/product-service:ama-v1
           image: ameldocker98/product-service:v1
           imagePullPolicy: IfNotPresent
           ports:
@@ -38,13 +41,16 @@ spec:
               protocol: TCP
           # --- Environment Variables ---
           env:
-            - name: OTEL_SERVICE_NAME
+            # Azure Monitor Application Insights
+            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: app-insights-connection
+                  key: connection-string
+            - name: APPLICATIONINSIGHTS_ROLE_NAME
               value: "product-service"
             - name: JAVA_OPTS
               value: "-Xms128m -Xmx256m"
-          envFrom:
-            - configMapRef:
-                name: otel-config
           # --- Health Probes (using Spring Actuator endpoint from developers) ---
           livenessProbe:
             httpGet:
