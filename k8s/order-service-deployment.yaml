@@ -1,6 +1,9 @@
 # ============================================================
 # Order Service Deployment — 🔧 Admin/DevOps responsibility
 # ============================================================
+# BRANCH: feature2_AMA
+# Uses Azure Monitor native instrumentation instead of OTEL Collector
+# ============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,7 +32,7 @@ spec:
       containers:
         - name: order-service
           # Replace with your ACR image path:
-          # image: <your-acr>.azurecr.io/order-service:1.0.0
+          # image: <your-acr>.azurecr.io/order-service:ama-v1
           image: ameldocker98/order-service:v1
           imagePullPolicy: IfNotPresent
           ports:
@@ -40,8 +43,15 @@ spec:
           env:
             - name: PORT
               value: "3000"
-            - name: OTEL_SERVICE_NAME
+            # Azure Monitor Application Insights
+            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: app-insights-connection
+                  key: connection-string
+            - name: APPLICATIONINSIGHTS_ROLE_NAME
               value: "order-service"
+            # Service URLs
             - name: PRODUCT_SERVICE_URL
               value: "http://product-service.observability-demo.svc.cluster.local:8080"
             - name: SHIPPING_SERVICE_URL
@@ -50,9 +60,6 @@ spec:
               value: "http://recommendation-service.analytics-system.svc.cluster.local:6000"
             - name: NODE_ENV
               value: "production"
-          envFrom:
-            - configMapRef:
-                name: otel-config
           # --- Health Probes (using health endpoint from developers) ---
           livenessProbe:
             httpGet:
