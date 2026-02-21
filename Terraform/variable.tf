@@ -21,7 +21,7 @@ variable "resource_group_name" {
 variable "cluster_name" {
   description = "Name of the AKS Cluster"
   type        = string
-  default     = "aks-prod-cluster"
+  default     = "aks-prod-cluster2"
 }
 
 variable "log_analytics_name" {
