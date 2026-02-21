@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendation-service
+  namespace: analytics-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recommendation-service
+  template:
+    metadata:
+      labels:
+        app: recommendation-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6000"
+    spec:
+      containers:
+      - name: recommendation-service
+        image: ameldocker98/recommendation-service:v1
+        ports:
+        - containerPort: 6000
+        envFrom:
+        - configMapRef:
+            name: otel-config
+        env:
+        - name: OTEL_SERVICE_NAME
+          value: "recommendation-service"
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "300m"
+          requests:
+            memory: "128Mi"
+            cpu: "150m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 6000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation-service
+  namespace: analytics-system
+spec:
+  selector:
+    app: recommendation-service
+  ports:
+  - protocol: TCP
+    port: 6000
+    targetPort: 6000
+  type: ClusterIP

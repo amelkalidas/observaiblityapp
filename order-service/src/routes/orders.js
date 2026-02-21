@@ -34,6 +34,8 @@ const ordersFailedCounter = meter.createCounter('orders_failed_total', {
 
 // --- Product Service URL (set via env var in K8s) ---
 const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || 'http://localhost:8080';
+const SHIPPING_SERVICE_URL = process.env.SHIPPING_SERVICE_URL || 'http://localhost:5000';
+const RECOMMENDATION_SERVICE_URL = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:6000';
 
 /**
  * GET /orders — List all orders
@@ -122,14 +124,42 @@ router.post('/', async (req, res) => {
                 });
             }
 
-            // --- Step 3: Create order ---
+            // --- Step 3: Calculate Shipping ---
+            logger.info({ productId, quantity }, 'Calculating shipping');
+            let shipping;
+            try {
+                const shippingResp = await axios.post(`${SHIPPING_SERVICE_URL}/calculate`, { quantity });
+                shipping = shippingResp.data;
+                span.addEvent('shipping_calculated', { 'shipping.tracking_id': shipping.tracking_id, 'shipping.cost': shipping.cost });
+            } catch (err) {
+                logger.warn({ error: err.message }, 'Shipping service unavailable, using flat rate');
+                shipping = { tracking_id: 'PENDING', cost: 10.0 };
+            }
+
+            // --- Step 4: Get Recommendations ---
+            logger.info({ productId }, 'Fetching recommendations');
+            let recommendations = [];
+            try {
+                const recResp = await axios.get(`${RECOMMENDATION_SERVICE_URL}/recommendations/${productId}`);
+                recommendations = recResp.data.recommendations;
+                span.addEvent('recommendations_fetched', { 'count': recommendations.length });
+            } catch (err) {
+                logger.warn({ error: err.message }, 'Recommendation service unavailable');
+            }
+
+            // --- Step 5: Create order ---
             const order = {
                 id: uuidv4(),
                 productId,
                 productName: product.name,
                 quantity,
                 unitPrice: product.price,
-                totalPrice: product.price * quantity,
+                totalPrice: (product.price * quantity) + shipping.cost,
+                shipping: {
+                    trackingId: shipping.tracking_id,
+                    cost: shipping.cost
+                },
+                recommendations: recommendations,
                 status: 'CONFIRMED',
                 createdAt: new Date().toISOString(),
             };

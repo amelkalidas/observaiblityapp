@@ -44,6 +44,10 @@ spec:
               value: "order-service"
             - name: PRODUCT_SERVICE_URL
               value: "http://product-service.observability-demo.svc.cluster.local:8080"
+            - name: SHIPPING_SERVICE_URL
+              value: "http://shipping-service.shipping-system.svc.cluster.local:5000"
+            - name: RECOMMENDATION_SERVICE_URL
+              value: "http://recommendation-service.analytics-system.svc.cluster.local:6000"
             - name: NODE_ENV
               value: "production"
           envFrom:
