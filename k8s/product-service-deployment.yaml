@@ -2,7 +2,8 @@
 # Product Service Deployment — 🔧 Admin/DevOps responsibility
 # ============================================================
 # BRANCH: feature2_AMA
-# Uses Azure Monitor native instrumentation instead of OTEL Collector
+# Uses Azure Monitor Agent (AMA) for container logs only
+# No Application Insights - pure log-based observability
 # ============================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -31,8 +32,6 @@ spec:
     spec:
       containers:
         - name: product-service
-          # Replace with your ACR image path:
-          # image: <your-acr>.azurecr.io/product-service:ama-v1
           image: ameldocker98/product-service:v1
           imagePullPolicy: IfNotPresent
           ports:
@@ -41,14 +40,6 @@ spec:
               protocol: TCP
           # --- Environment Variables ---
           env:
-            # Azure Monitor Application Insights
-            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: app-insights-connection
-                  key: connection-string
-            - name: APPLICATIONINSIGHTS_ROLE_NAME
-              value: "product-service"
             - name: JAVA_OPTS
               value: "-Xms128m -Xmx256m"
           # --- Health Probes (using Spring Actuator endpoint from developers) ---
